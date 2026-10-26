@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>極限組裝大師：Mechanical Overclock</title>
+<style>
+  :root {
+    --bg: #060c12;
+    --panel: rgba(9, 20, 30, 0.9);
+    --line: #1f4258;
+    --cyan: #3ee6ff;
+    --green: #38f5a0;
+    --amber: #ffb020;
+    --red: #ff3b5c;
+    --text: #d7ecf5;
+    --dim: #7896a6;
+    --mono: Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  #wrap { position: relative; font-size: 16px; user-select: none; -webkit-user-select: none; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .hidden { display: none !important; }
+
+  /* 計分板 */
+  #hud {
+    position: absolute; top: 0.6em; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 0.5em; pointer-events: none;
+  }
+  .stat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 0.3em;
+    padding: 0.25em 0.8em; min-width: 6.5em; text-align: center;
+  }
+  .stat small { display: block; font-size: 0.62em; color: var(--dim); letter-spacing: 0.15em; }
+  .stat b { font-family: var(--mono); font-size: 1.15em; color: var(--cyan); }
+  .stat.warn b { color: var(--red); }
+
+  #toast {
+    position: absolute; top: 4.4em; left: 50%; transform: translate(-50%, -0.5em);
+    opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap;
+    background: var(--panel); border: 1px solid var(--cyan); color: var(--cyan);
+    padding: 0.4em 1.2em; border-radius: 0.3em; font-weight: 600;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.bad { border-color: var(--red); color: var(--red); }
+  #toast.good { border-color: var(--green); color: var(--green); }
+
+  /* 開始／結果畫面 */
+  .screen {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(4, 9, 14, 0.78); backdrop-filter: blur(3px);
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--cyan);
+    padding: 1.6em 2.2em; width: 36em; max-width: 92%;
+    box-shadow: 0 0 2em rgba(62, 230, 255, 0.12);
+  }
+  .card h1 { margin: 0; font-size: 2.4em; letter-spacing: 0.08em; }
+  .card h2 {
+    margin: 0.1em 0 1em; font-family: var(--mono); font-size: 0.95em; font-weight: 400;
+    color: var(--cyan); letter-spacing: 0.4em;
+  }
+  .card ol { margin: 0 0 0.6em; padding-left: 1.3em; line-height: 1.7; font-size: 0.92em; }
+  .card p { margin: 0 0 1em; color: var(--dim); }
+  .row {
+    display: flex; justify-content: space-between; font-family: var(--mono);
+    padding: 0.25em 0; border-bottom: 1px dashed var(--line);
+  }
+  .row.total { color: var(--cyan); font-size: 1.2em; border-bottom: none; }
+  button {
+    font: inherit; font-weight: 700; letter-spacing: 0.15em; cursor: pointer;
+    background: transparent; color: var(--cyan); border: 1px solid var(--cyan);
+    padding: 0.6em 1.6em; margin: 1em 0.6em 0 0;
+  }
+  button:hover { background: var(--cyan); color: var(--bg); }
+  button.danger { color: var(--red); border-color: var(--red); }
+  button.danger:hover { background: var(--red); color: #fff; }
+  .best { color: var(--dim); font-family: var(--mono); font-size: 0.85em; margin-top: 0.8em; }
+
+  /* 遊戲中隨時可按的按鈕 */
+  #menuBtns { position: absolute; top: 0.6em; left: 1.2em; display: flex; gap: 0.5em; }
+  #menuBtns button {
+    margin: 0; padding: 0.45em 1em; font-size: 0.8em;
+    background: var(--panel); border-color: var(--line); color: var(--text);
+  }
+  #menuBtns button:hover { border-color: var(--cyan); background: var(--cyan); color: var(--bg); }
+  #btnClose {
+    position: absolute; top: 0.6em; right: 1.2em; margin: 0;
+    width: 2.2em; height: 2.2em; padding: 0; font-size: 1em; line-height: 1; letter-spacing: 0;
+    background: var(--panel); border-color: var(--line); color: var(--text);
+  }
+  #btnClose:hover { border-color: var(--red); background: var(--red); color: #fff; }
+
+  /* 過載測試面板 */
+  #testPanel {
+    position: absolute; right: 1.2em; top: 4.4em; width: 19em;
+    background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--amber);
+    padding: 0.9em 1em;
+  }
+  #testPanel h3 { margin: 0 0 0.4em; font-size: 0.9em; letter-spacing: 0.2em; color: var(--amber); }
+  .label { display: flex; justify-content: space-between; font-size: 0.75em; color: var(--dim); margin: 0.8em 0 0.3em; }
+  .label b { font-family: var(--mono); color: var(--text); font-size: 1.15em; }
+  .bar { position: relative; height: 0.75em; background: #0b1822; border: 1px solid var(--line); }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--cyan); }
+  .band {
+    position: absolute; top: 0; bottom: 0; background: rgba(56, 245, 160, 0.3);
+    border-left: 1px solid var(--green); border-right: 1px solid var(--green);
+  }
+  .needle { position: absolute; top: -0.25em; bottom: -0.25em; width: 3px; margin-left: -1px; background: #fff; }
+  .tick { position: absolute; top: -0.2em; bottom: -0.2em; width: 1px; background: var(--amber); }
+  .tick.red { background: var(--red); }
+  input[type=range] { width: 100%; margin: 0.4em 0 0; accent-color: var(--cyan); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="stat"><small>PHASE</small><b id="hPhase">組裝</b></div>
+    <div class="stat"><small>SCORE</small><b id="hScore">0</b></div>
+    <div class="stat" id="sTime"><small>TIME</small><b id="hTime">120</b></div>
+    <div class="stat" id="sMiss"><small>ERRORS</small><b id="hMiss">0/5</b></div>
+  </div>
+
+  <div id="menuBtns" class="hidden">
+    <button id="btnRestart">⟲ 重來</button>
+  </div>
+  <button id="btnClose" class="hidden" title="離開遊戲">✕</button>
+
+  <div id="toast"></div>
+
+  <div id="testPanel" class="hidden">
+    <h3>⚙ 過載測試 OVERCLOCK TEST</h3>
+    <div class="label"><span>轉速 RPM（綠區＝目標）</span><b id="rpmVal">0</b></div>
+    <div class="bar"><div class="band" id="band"></div><div class="needle" id="needle"></div></div>
+    <input type="range" id="rpmSlider" min="0" max="12000" step="100" value="0">
+    <div class="label"><span>冷卻流量</span><b id="coolVal">40%</b></div>
+    <input type="range" id="coolSlider" min="0" max="100" value="40">
+    <div class="label"><span>溫度（100°C 警戒／120°C 失效）</span><b id="tempVal">25°C</b></div>
+    <div class="bar">
+      <div class="fill" id="tempBar"></div>
+      <div class="tick" style="left:71.4%"></div>
+      <div class="tick red" style="left:90.5%"></div>
+    </div>
+    <div class="label"><span>冷卻液存量</span><b id="coolantVal">100%</b></div>
+    <div class="bar"><div class="fill" id="coolantBar" style="background:#3e8bff"></div></div>
+    <div class="label"><span>穩定運轉進度</span><b id="progVal">0.0 / 15s</b></div>
+    <div class="bar"><div class="fill" id="progBar" style="background:var(--green)"></div></div>
+  </div>
+
+  <div id="startScreen" class="screen">
+    <div class="card">
+      <h1>極限組裝大師</h1>
+      <h2>MECHANICAL OVERCLOCK</h2>
+      <ol>
+        <li>把右側的<b>定位柱</b>拖進主機板上的所有孔位（S1–S3、L1–L2）。</li>
+        <li>再把左側<b>尺寸正確的齒輪</b>裝到主軸上。虛線圓是節圓，C 是中心距。</li>
+        <li>尺寸不對會<b>干涉</b>或<b>無法嚙合</b>，每次扣 50 分，失誤 5 次即失敗。限時 120 秒。</li>
+        <li>組裝完成進入<b>過載測試</b>：60 秒內用滑桿讓轉速待在綠區累積 15 秒，溫度不可達 120°C。</li>
+      </ol>
+      <button id="btnStart">開始組裝</button>
+      <div class="best" id="bestStart"></div>
+    </div>
+  </div>
+
+  <div id="exitScreen" class="screen hidden" style="background: var(--bg);">
+    <div class="card">
+      <h1>已離開遊戲</h1>
+      <h2>SESSION CLOSED</h2>
+      <p>請按 <b>Ctrl + W</b>，或點瀏覽器分頁上的 ✕ 關閉。</p>
+    </div>
+  </div>
+
+  <div id="resultScreen" class="screen hidden">
+    <div class="card">
+      <h1 id="rTitle">測試通過</h1>
+      <h2 id="rSub">TEST PASSED</h2>
+      <p id="rReason"></p>
+      <div id="rRows"></div>
+      <button id="btnRetry">再挑戰</button>
+      <button id="btnMenu">回主畫面</button>
+      <button id="btnExit" class="danger">✕ 跳出</button>
+      <div class="best" id="rBest"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const W = 1280, H = 720;
+const DEG = Math.PI / 180;
+const ASSEMBLY_TIME = 120;
+const MAX_MISTAKES = 5;
+const TEST_GOAL = 15;
+const TEST_TIME = 60;
+const SNAP_DIST = 40;
+const MAGNET_DIST = 90;
+const RPM_MAX = 12000;
+const BANDS = [[3000, 5000], [5000, 7000], [6500, 8500], [8000, 10000], [9000, 11000]];
+const PLATE = { x: 370, y: 95, w: 560, h: 550 };
+const CYAN = '#3ee6ff', GREEN = '#38f5a0', RED = '#ff3b5c', AMBER = '#ffb020';
+
+const $ = id => document.getElementById(id);
+const canvas = $('game');
+const ctx = canvas.getContext('2d');
+const wrap = $('wrap');
+
+// ---------- 美術素材：找不到檔案就用程式畫的圖形 ----------
+const ART = {
+  background: { file: 'assets/background.png', key: false },
+  chassis:    { file: 'assets/chassis.png',    key: true },
+  gear:       { file: 'assets/gear.png',       key: true },
+  pin:        { file: 'assets/pin.png',        key: true },
+};
+const art = {};
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+// 綠幕去背並裁掉四周空白；直接雙擊開檔（file://）時瀏覽器禁止讀像素，就用原圖
+function keyGreen(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const data = g.getImageData(0, 0, c.width, c.height);
+    const p = data.data;
+    let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+    for (let i = 0; i < p.length; i += 4) {
+      const r = p[i], gr = p[i + 1], b = p[i + 2];
+      if (gr > 120 && gr > r * 1.3 && gr > b * 1.3) {
+        p[i + 3] = 0;
+      } else if (p[i + 3] > 0) {
+        const x = (i / 4) % c.width, y = Math.floor(i / 4 / c.width);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    g.putImageData(data, 0, 0);
+    if (maxX < 0) return c;
+    const out = document.createElement('canvas');
+    out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+    out.getContext('2d').drawImage(c, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+    return out;
+  } catch (e) {
+    console.warn('無法去綠幕，請用本機伺服器開啟（見 README）', e);
+    return img;
+  }
+}
+
+async function loadArt() {
+  await Promise.all(Object.entries(ART).map(async ([name, cfg]) => {
+    const img = await loadImage(cfg.file);
+    art[name] = img && cfg.key ? keyGreen(img) : img;
+  }));
+}
+
+// ---------- 遊戲狀態 ----------
+let state = 'title';
+let slots = [], parts = [], particles = [];
+let score = 0, mistakes = 0, timeLeft = ASSEMBLY_TIME, timeBonus = 0;
+let drag = null;
+let masterAngle = 0, completeTimer = 0, shake = 0, flash = 0;
+let test = null;
+let best = 0;
+try { best = Number(localStorage.getItem('overclockBest')) || 0; } catch (e) {}
+
+const teeth = r => Math.round(r / 3);
+
+// 三根主軸組成齒輪系，中心距 = 兩齒輪節圓半徑相加
+function buildSlots() {
+  const s1 = { id: 'S1', type: 'shaft', x: 540, y: 420, r: 90 };
+  const s2 = { id: 'S2', type: 'shaft', x: s1.x + 150 * Math.cos(-30 * DEG), y: s1.y + 150 * Math.sin(-30 * DEG), r: 60, parent: s1 };
+  const s3 = { id: 'S3', type: 'shaft', x: s2.x + 105 * Math.cos(40 * DEG), y: s2.y + 105 * Math.sin(40 * DEG), r: 45, parent: s2 };
+  const l1 = { id: 'L1', type: 'locate', x: 410, y: 140 };
+  const l2 = { id: 'L2', type: 'locate', x: 890, y: 600 };
+  const list = [s1, s2, s3, l1, l2];
+  for (const s of list) { s.pin = null; s.gear = null; }
+  return list;
+}
+
+function buildParts() {
+  const list = [];
+  // 其中 r=75 是混淆用的零件，裝在哪裡都不對
+  const gearDefs = [[90, 175, 195], [75, 175, 445], [60, 100, 615], [45, 250, 620]];
+  for (const [r, x, y] of gearDefs) {
+    list.push({ kind: 'gear', r, z: teeth(r), hx: x, hy: y, x, y, angle: Math.random() * Math.PI, slot: null });
+  }
+  for (let i = 0; i < 5; i++) {
+    const x = 1110 + (i % 2 ? 40 : -40), y = 150 + i * 105;
+    list.push({ kind: 'pin', r: 14, hx: x, hy: y, x, y, angle: 0, slot: null });
+  }
+  return list;
+}
+
+// 依嚙合關係算出每個齒輪的角度，讓齒剛好卡進對方齒槽
+function slotAngle(s) {
+  if (!s.parent) return masterAngle;
+  const p = s.parent;
+  const th = Math.atan2(s.y - p.y, s.x - p.x);
+  const zp = teeth(p.r), zc = teeth(s.r);
+  return th + Math.PI - Math.PI / zc - (slotAngle(p) - th) * zp / zc;
+}
+
+function newGame() {
+  slots = buildSlots();
+  parts = buildParts();
+  particles = [];
+  score = 0; mistakes = 0; timeLeft = ASSEMBLY_TIME; timeBonus = 0;
+  drag = null; masterAngle = 0; test = null;
+  state = 'assemble';
+  $('startScreen').classList.add('hidden');
+  $('resultScreen').classList.add('hidden');
+  $('testPanel').classList.add('hidden');
+  $('hud').classList.remove('hidden');
+  $('menuBtns').classList.remove('hidden');
+  $('btnClose').classList.remove('hidden');
+  toast('先把定位柱裝進所有孔位');
+}
+
+function showMenu() {
+  state = 'title';
+  slots = buildSlots();
+  parts = buildParts();
+  test = null;
+  $('resultScreen').classList.add('hidden');
+  $('exitScreen').classList.add('hidden');
+  $('testPanel').classList.add('hidden');
+  $('hud').classList.add('hidden');
+  $('menuBtns').classList.add('hidden');
+  $('btnClose').classList.add('hidden');
+  $('startScreen').classList.remove('hidden');
+  $('bestStart').textContent = best ? `最高分 ${best}` : '';
+}
+
+// ---------- 組裝判定 ----------
+function partAt(x, y) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    if (p.slot) continue;
+    const hr = p.kind === 'gear' ? p.r + 5 : 26;
+    if (Math.hypot(x - p.x, y - p.y) < hr) return p;
+  }
+  return null;
+}
+
+function candidateSlot(p) {
+  let bestSlot = null, bestDist = MAGNET_DIST;
+  for (const s of slots) {
+    if (p.kind === 'pin' ? s.pin : (s.type !== 'shaft' || s.gear)) continue;
+    const d = Math.hypot(p.x - s.x, p.y - s.y);
+    if (d < bestDist) { bestDist = d; bestSlot = s; }
+  }
+  return bestSlot ? { slot: bestSlot, dist: bestDist } : null;
+}
+
+// 拖曳中的即時碰撞：只看已經裝好的齒輪
+function overlapsPlaced(p, x, y) {
+  if (p.kind !== 'gear') return false;
+  return parts.some(o => o !== p && o.kind === 'gear' && o.slot &&
+    Math.hypot(o.slot.x - x, o.slot.y - y) < p.r + o.r - 4);
+}
+
+// 放下時的完整判定：用設計中心距檢查干涉與嚙合
+function checkGear(p, s) {
+  for (const o of slots) {
+    if (o === s || o.type !== 'shaft') continue;
+    const d = Math.hypot(o.x - s.x, o.y - s.y);
+    const sum = p.r + o.r;
+    if (sum > d + 2) return `干涉！與 ${o.id} 齒輪重疊`;
+    const adjacent = o.parent === s || s.parent === o;
+    if (adjacent && sum < d - 2) return `無法嚙合：與 ${o.id} 之間有間隙`;
+  }
+  return null;
+}
+
+function tryPlace(p, s) {
+  if (p.kind === 'gear' && !s.pin) {
+    toast(`請先在 ${s.id} 裝上定位柱`, 'bad');
+    return;
+  }
+  const err = p.kind === 'gear' ? checkGear(p, s) : null;
+  if (err) {
+    mistakes++;
+    score = Math.max(0, score - 50);
+    toast(`${err}　−50`, 'bad');
+    shake = 0.35; flash = 0.4;
+    burst(s.x, s.y, RED, 18);
+    if (mistakes >= MAX_MISTAKES) endGame(false, '失誤過多：組裝品質不合格');
+    return;
+  }
+  p.slot = s; p.x = s.x; p.y = s.y;
+  if (p.kind === 'pin') s.pin = p; else s.gear = p;
+  score += 100;
+  toast(`${s.id} ${p.kind === 'pin' ? '定位柱' : '齒輪'}安裝完成　+100`, 'good');
+  burst(s.x, s.y, CYAN, 24);
+
+  if (slots.every(o => o.pin && (o.type !== 'shaft' || o.gear))) {
+    timeBonus = Math.ceil(timeLeft) * 5;
+    score += timeBonus;
+    state = 'complete';
+    completeTimer = 1.8;
+    toast(`組裝完成！時間獎勵 +${timeBonus}`, 'good');
+  }
+}
+
+// ---------- 輸入 ----------
+function toGame(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (state !== 'assemble') return;
+  const m = toGame(e);
+  const p = partAt(m.x, m.y);
+  if (!p) return;
+  drag = { part: p, dx: m.x - p.x, dy: m.y - p.y, near: null, snap: null };
+  parts.splice(parts.indexOf(p), 1);
+  parts.push(p);
+  canvas.setPointerCapture(e.pointerId);
+  canvas.style.cursor = 'grabbing';
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const m = toGame(e);
+  const p = drag.part;
+  p.x = m.x - drag.dx;
+  p.y = m.y - drag.dy;
+  const c = candidateSlot(p);
+  drag.near = c ? c.slot : null;
+  drag.snap = c && c.dist < SNAP_DIST ? c.slot : null;
+});
+
+function endDrag() {
+  if (!drag) return;
+  const { part, snap } = drag;
+  drag = null;
+  canvas.style.cursor = 'grab';
+  if (snap && state === 'assemble') tryPlace(part, snap);
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+$('btnStart').onclick = newGame;
+$('btnRetry').onclick = newGame;
+$('btnMenu').onclick = showMenu;
+$('btnRestart').onclick = newGame;
+$('btnClose').onclick = exitGame;
+$('btnExit').onclick = exitGame;
+
+// 離開遊戲：先試著關分頁；瀏覽器不允許時，改顯示「已離開」畫面
+function exitGame() {
+  state = 'exited';
+  drag = null;
+  test = null;
+  for (const id of ['hud', 'menuBtns', 'btnClose', 'testPanel', 'startScreen', 'resultScreen']) {
+    $(id).classList.add('hidden');
+  }
+  $('exitScreen').classList.remove('hidden');
+  window.close();
+}
+
+// ---------- 過載測試 ----------
+function startTest() {
+  state = 'test';
+  test = { rpm: 0, temp: 25, coolant: 100, progress: 0, peak: 25, band: BANDS[0], bandTimer: 6, timeLeft: TEST_TIME };
+  $('rpmSlider').value = 0;
+  $('coolSlider').value = 40;
+  $('testPanel').classList.remove('hidden');
+  toast('過載測試開始：讓轉速維持在綠區', 'good');
+}
+
+function updateTest(dt) {
+  const t = test;
+  const target = Number($('rpmSlider').value);
+  const coolSet = Number($('coolSlider').value) / 100;
+  t.rpm += (target - t.rpm) * Math.min(1, dt * 1.8);
+
+  // 發熱與轉速平方成正比；冷卻要消耗冷卻液，用完就只剩自然散熱
+  const cool = t.coolant > 0 ? coolSet : 0;
+  t.coolant = Math.max(0, t.coolant - cool * 2.5 * dt);
+  const heat = 0.233 * (t.rpm / 1000) ** 2;
+  t.temp += (heat - (0.25 * cool + 0.02) * (t.temp - 25)) * dt;
+  t.peak = Math.max(t.peak, t.temp);
+  masterAngle += t.rpm / 60 * Math.PI * 2 * dt * 0.02;
+
+  if (t.rpm >= t.band[0] && t.rpm <= t.band[1]) {
+    t.progress += dt;
+    score += 40 * dt;
+  }
+  if (t.temp > 100) {
+    score = Math.max(0, score - 30 * dt);
+    shake = Math.max(shake, (t.temp - 100) / 200);
+  }
+
+  t.bandTimer -= dt;
+  if (t.bandTimer <= 0) {
+    let nb;
+    do nb = BANDS[Math.floor(Math.random() * BANDS.length)]; while (nb === t.band);
+    t.band = nb;
+    t.bandTimer = 6;
+    toast(`目標轉速變更：${nb[0]}–${nb[1]} RPM`);
+  }
+
+  t.timeLeft = Math.max(0, t.timeLeft - dt);
+  if (t.temp >= 120) {
+    burst(slots[0].x, slots[0].y, AMBER, 60);
+    endGame(false, '過熱失效：主軸咬死');
+  } else if (t.progress >= TEST_GOAL) {
+    endGame(true, '機構在超頻條件下穩定運轉');
+  } else if (t.timeLeft <= 0) {
+    endGame(false, `測試超時：${TEST_TIME} 秒內未完成穩定運轉`);
+  }
+}
+
+function endGame(win, reason) {
+  state = win ? 'win' : 'fail';
+  drag = null;
+  $('menuBtns').classList.add('hidden');
+  $('btnClose').classList.add('hidden');
+  const rows = [['時間獎勵', timeBonus], ['失誤次數', `${mistakes} / ${MAX_MISTAKES}`]];
+  if (win) {
+    const coolantBonus = Math.round(test.coolant * 5);
+    const lowTempBonus = test.peak < 100 ? 300 : 0;
+    score += coolantBonus + lowTempBonus;
+    rows.push(['冷卻液剩餘獎勵', coolantBonus], ['低溫運轉獎勵', lowTempBonus], ['最高溫度', `${test.peak.toFixed(1)}°C`]);
+  }
+  const final = Math.round(score);
+  const isBest = final > best;
+  if (isBest) {
+    best = final;
+    try { localStorage.setItem('overclockBest', best); } catch (e) {}
+  }
+
+  $('rTitle').textContent = win ? '測試通過' : '測試失敗';
+  $('rTitle').style.color = win ? GREEN : RED;
+  $('rSub').textContent = win ? 'OVERCLOCK STABLE' : 'SYSTEM FAILURE';
+  $('rReason').textContent = reason;
+  $('rRows').innerHTML = rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join('') +
+    `<div class="row total"><span>總分</span><span>${final}</span></div>`;
+  $('rBest').textContent = isBest ? '★ 新紀錄！' : `最高分 ${best}`;
+  setTimeout(() => {
+    $('testPanel').classList.add('hidden');
+    $('resultScreen').classList.remove('hidden');
+  }, win ? 600 : 900);
+}
+
+// ---------- 特效與提示 ----------
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 260;
+    particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.5, color });
+  }
+}
+
+let toastTimer = 0;
+function toast(msg, type = '') {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = type; }, 1700);
+}
+
+// ---------- 更新 ----------
+function update(dt) {
+  if (state === 'assemble') {
+    timeLeft -= dt;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      endGame(false, '超時：未在時限內完成組裝');
+    }
+  } else if (state === 'complete') {
+    completeTimer -= dt;
+    masterAngle += dt * 1.5;
+    if (completeTimer <= 0) startTest();
+  } else if (state === 'test') {
+    updateTest(dt);
+  }
+
+  // 沒裝上的零件自動飛回零件匣
+  const k = Math.min(1, dt * 12);
+  for (const p of parts) {
+    if (p.slot || (drag && drag.part === p)) continue;
+    p.x += (p.hx - p.x) * k;
+    p.y += (p.hy - p.y) * k;
+  }
+
+  for (const s of particles) {
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    s.vx *= 0.92; s.vy *= 0.92;
+    s.life -= dt;
+  }
+  particles = particles.filter(s => s.life > 0);
+  shake = Math.max(0, shake - dt);
+  flash = Math.max(0, flash - dt);
+  updateHud();
+}
+
+const phaseName = { title: '待機', assemble: '組裝', complete: '完成', test: '過載測試', win: '通過', fail: '失敗', exited: '離開' };
+
+function updateHud() {
+  $('hPhase').textContent = phaseName[state];
+  $('hScore').textContent = Math.round(score);
+  const shownTime = state === 'assemble' ? timeLeft : state === 'test' ? test.timeLeft : null;
+  $('hTime').textContent = shownTime === null ? '—' : Math.ceil(shownTime);
+  $('sTime').classList.toggle('warn', shownTime !== null && shownTime < 20);
+  $('hMiss').textContent = `${mistakes}/${MAX_MISTAKES}`;
+  $('sMiss').classList.toggle('warn', mistakes >= MAX_MISTAKES - 1);
+  if (!test) return;
+
+  const t = test;
+  $('rpmVal').textContent = Math.round(t.rpm);
+  $('needle').style.left = (t.rpm / RPM_MAX * 100) + '%';
+  $('band').style.left = (t.band[0] / RPM_MAX * 100) + '%';
+  $('band').style.width = ((t.band[1] - t.band[0]) / RPM_MAX * 100) + '%';
+  $('coolVal').textContent = $('coolSlider').value + '%';
+  $('tempVal').textContent = t.temp.toFixed(1) + '°C';
+  const tb = $('tempBar');
+  tb.style.width = Math.min(100, Math.max(0, (t.temp - 25) / 105 * 100)) + '%';
+  tb.style.background = t.temp < 80 ? CYAN : t.temp < 100 ? AMBER : RED;
+  $('coolantVal').textContent = Math.round(t.coolant) + '%';
+  $('coolantBar').style.width = t.coolant + '%';
+  $('progVal').textContent = `${Math.min(t.progress, TEST_GOAL).toFixed(1)} / ${TEST_GOAL}s`;
+  $('progBar').style.width = Math.min(100, t.progress / TEST_GOAL * 100) + '%';
+}
+
+// ---------- 繪圖 ----------
+function line(x1, y1, x2, y2) {
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+
+function circle(x, y, r) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+}
+
+function drawBackground() {
+  if (art.background) {
+    const b = art.background, s = Math.max(W / b.width, H / b.height);
+    ctx.drawImage(b, (W - b.width * s) / 2, (H - b.height * s) / 2, b.width * s, b.height * s);
+    ctx.fillStyle = 'rgba(6, 12, 18, 0.55)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#08121b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x += 32) { ctx.strokeStyle = x % 160 ? '#0d1e2c' : '#143049'; line(x + 0.5, 0, x + 0.5, H); }
+    for (let y = 0; y <= H; y += 32) { ctx.strokeStyle = y % 160 ? '#0d1e2c' : '#143049'; line(0, y + 0.5, W, y + 0.5); }
+  }
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.75);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawTray(x, y, w, h, title) {
+  ctx.fillStyle = 'rgba(9, 20, 30, 0.6)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#1f4258'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.strokeStyle = CYAN; ctx.lineWidth = 2;
+  const c = 14;
+  for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + c * sy); ctx.lineTo(cx, cy); ctx.lineTo(cx + c * sx, cy);
+    ctx.stroke();
+  }
+  ctx.fillStyle = CYAN; ctx.font = '12px Consolas, monospace'; ctx.textAlign = 'left';
+  ctx.fillText(title, x + 14, y + 22);
+}
+
+function drawHexBolt(x, y) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3 + Math.PI / 6;
+    ctx.lineTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#3a4d5a'; ctx.fill();
+  ctx.strokeStyle = '#1a2730'; ctx.lineWidth = 1.5; ctx.stroke();
+  circle(x, y, 3.5); ctx.fillStyle = '#1a2730'; ctx.fill();
+}
+
+function drawChassis() {
+  const { x, y, w, h } = PLATE;
+  if (art.chassis) {
+    const c = art.chassis, s = Math.min(w / c.width, h / c.height);
+    ctx.drawImage(c, x + (w - c.width * s) / 2, y + (h - c.height * s) / 2, c.width * s, c.height * s);
+    return;
+  }
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, '#1a2b38');
+  g.addColorStop(1, '#0d1821');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.fill();
+  ctx.strokeStyle = '#2f5870'; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle = 'rgba(62, 230, 255, 0.18)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 14.5, y + 14.5, w - 29, h - 29);
+  ctx.setLineDash([]);
+
+  drawHexBolt(x + 30, y + h - 30);
+  drawHexBolt(x + w - 30, y + 30);
+
+  ctx.fillStyle = '#0a141c';
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath(); ctx.roundRect(x + w - 180 + i * 18, y + 26, 8, 44, 4); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(62, 230, 255, 0.45)';
+  ctx.font = '11px Consolas, monospace'; ctx.textAlign = 'left';
+  ctx.fillText('MK-II DRIVE CHASSIS  //  REV.07', x + 56, y + h - 26);
+
+  // 測試中溫度升高，機殼外框跟著發紅
+  if (test) {
+    const heat = Math.min(1, Math.max(0, (test.temp - 60) / 60));
+    if (heat > 0) {
+      ctx.save();
+      ctx.shadowColor = RED; ctx.shadowBlur = 30 * heat;
+      ctx.strokeStyle = `rgba(255, 59, 92, ${heat})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+function drawDims() {
+  ctx.save();
+  ctx.setLineDash([3, 5]);
+  ctx.strokeStyle = 'rgba(255, 176, 32, 0.35)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(255, 176, 32, 0.8)';
+  ctx.font = '11px Consolas, monospace'; ctx.textAlign = 'center';
+  for (const s of slots) {
+    if (!s.parent) continue;
+    const p = s.parent;
+    line(p.x, p.y, s.x, s.y);
+    ctx.fillText('C ' + Math.round(Math.hypot(s.x - p.x, s.y - p.y)), (p.x + s.x) / 2, (p.y + s.y) / 2 - 6);
+  }
+  ctx.restore();
+}
+
+function drawSlots() {
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 150);
+  for (const s of slots) {
+    if (s.type === 'shaft' && !s.gear) {
+      ctx.setLineDash([5, 6]);
+      ctx.strokeStyle = 'rgba(62, 230, 255, 0.35)'; ctx.lineWidth = 1;
+      circle(s.x, s.y, s.r); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = 'rgba(62, 230, 255, 0.25)'; ctx.lineWidth = 1;
+    const len = s.type === 'shaft' ? s.r + 12 : 26;
+    line(s.x - len, s.y, s.x + len, s.y);
+    line(s.x, s.y - len, s.x, s.y + len);
+
+    circle(s.x, s.y, 16);
+    ctx.fillStyle = '#050a0f'; ctx.fill();
+    ctx.strokeStyle = '#2f6a85'; ctx.lineWidth = 2; ctx.stroke();
+
+    if (!s.gear) {
+      ctx.fillStyle = '#7896a6'; ctx.font = '12px Consolas, monospace'; ctx.textAlign = 'center';
+      ctx.fillText(s.id, s.x + 24, s.y - 22);
+    }
+
+    if (drag && drag.near === s) {
+      ctx.strokeStyle = drag.snap === s ? GREEN : CYAN;
+      ctx.lineWidth = drag.snap === s ? 3 : 1.5;
+      ctx.globalAlpha = drag.snap === s ? 1 : 0.4 + pulse * 0.5;
+      circle(s.x, s.y, 22 + pulse * 4); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function gearPath(r, z, a) {
+  const step = Math.PI * 2 / z, ro = r + 5, rr = r - 6;
+  ctx.beginPath();
+  for (let k = 0; k < z; k++) {
+    const t = a + k * step;
+    ctx.arc(0, 0, rr, t - step * 0.7, t - step * 0.3);
+    ctx.lineTo(Math.cos(t - step * 0.16) * ro, Math.sin(t - step * 0.16) * ro);
+    ctx.lineTo(Math.cos(t + step * 0.16) * ro, Math.sin(t + step * 0.16) * ro);
+  }
+  ctx.closePath();
+}
+
+function drawGear(p, x, y, a, opt = {}) {
+  const r = p.r;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = opt.alpha ?? 1;
+  if (opt.glow) { ctx.shadowColor = opt.glow; ctx.shadowBlur = 20; }
+
+  if (art.gear) {
+    ctx.rotate(a);
+    ctx.drawImage(art.gear, -(r + 5), -(r + 5), (r + 5) * 2, (r + 5) * 2);
+    ctx.rotate(-a);
+    ctx.shadowBlur = 0;
+    if (opt.heat) { circle(0, 0, r); ctx.fillStyle = `rgba(255, 70, 30, ${opt.heat * 0.45})`; ctx.fill(); }
+    if (opt.danger) { circle(0, 0, r + 6); ctx.strokeStyle = RED; ctx.lineWidth = 3; ctx.stroke(); }
+  } else {
+    gearPath(r, p.z, a);
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r + 5);
+    g.addColorStop(0, '#d2dee6');
+    g.addColorStop(0.5, '#7d93a2');
+    g.addColorStop(1, '#3a4954');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (opt.heat) { ctx.fillStyle = `rgba(255, 70, 30, ${opt.heat * 0.55})`; ctx.fill(); }
+    ctx.strokeStyle = opt.danger ? RED : 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = opt.danger ? 3 : 1.2;
+    ctx.stroke();
+
+    if (r >= 50) {
+      for (let i = 0; i < 5; i++) {
+        const t = a + i * Math.PI * 2 / 5;
+        circle(Math.cos(t) * r * 0.58, Math.sin(t) * r * 0.58, r * 0.16);
+        ctx.fillStyle = '#0a141c'; ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 1; ctx.stroke();
+      }
+    }
+    circle(0, 0, r * 0.3);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    circle(0, 0, 10);
+    ctx.fillStyle = '#0a141c'; ctx.fill();
+  }
+
+  if (opt.label) {
+    ctx.fillStyle = 'rgba(6, 12, 18, 0.85)';
+    ctx.beginPath(); ctx.roundRect(-20, -9, 40, 18, 9); ctx.fill();
+    ctx.fillStyle = CYAN; ctx.font = 'bold 12px Consolas, monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Z' + p.z, 0, 4);
+  }
+  ctx.restore();
+}
+
+function drawPin(x, y, opt = {}) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = opt.alpha ?? 1;
+  if (opt.glow) { ctx.shadowColor = opt.glow; ctx.shadowBlur = 18; }
+  if (art.pin) {
+    ctx.drawImage(art.pin, -18, -18, 36, 36);
+  } else {
+    circle(0, 0, 14);
+    const g = ctx.createRadialGradient(-4, -4, 1, 0, 0, 14);
+    g.addColorStop(0, '#ffe7a8');
+    g.addColorStop(0.6, '#c39235');
+    g.addColorStop(1, '#6b4d14');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'; ctx.lineWidth = 1; ctx.stroke();
+    circle(0, 0, 8);
+    ctx.strokeStyle = 'rgba(255, 240, 200, 0.6)'; ctx.stroke();
+    circle(0, 0, 2.5);
+    ctx.fillStyle = '#4a3410'; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 24, (Math.random() - 0.5) * shake * 24);
+
+  drawBackground();
+  if (state !== 'test' && state !== 'win' && state !== 'fail') {
+    drawTray(20, 70, 310, 630, 'PARTS // 齒輪');
+    drawTray(960, 70, 300, 630, 'PARTS // 定位柱');
+  }
+  drawChassis();
+  drawDims();
+  drawSlots();
+
+  const heat = test ? Math.min(1, Math.max(0, (test.temp - 60) / 60)) : 0;
+  for (const s of slots) if (s.gear) drawGear(s.gear, s.x, s.y, slotAngle(s), { heat });
+  for (const s of slots) if (s.pin) drawPin(s.x, s.y);
+
+  const dragged = drag && drag.part;
+  for (const p of parts) {
+    if (p.slot || p === dragged) continue;
+    if (p.kind === 'gear') drawGear(p, p.x, p.y, p.angle, { label: true });
+    else drawPin(p.x, p.y);
+  }
+
+  // 拖曳中：靠近孔位就吸附，和已裝齒輪重疊就標紅
+  if (dragged) {
+    const s = drag.snap;
+    const x = s ? s.x : dragged.x, y = s ? s.y : dragged.y;
+    const danger = overlapsPlaced(dragged, x, y);
+    if (dragged.kind === 'gear') {
+      const a = s ? slotAngle(s) : dragged.angle;
+      drawGear(dragged, x, y, a, { label: true, alpha: 0.95, glow: danger ? RED : CYAN, danger });
+    } else {
+      drawPin(x, y, { glow: CYAN });
+    }
+  }
+
+  for (const s of particles) {
+    ctx.globalAlpha = Math.min(1, s.life * 2);
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2;
+    line(s.x, s.y, s.x - s.vx * 0.03, s.y - s.vy * 0.03);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255, 59, 92, ${flash * 0.35})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ---------- 主迴圈與縮放 ----------
+function fit() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  wrap.style.width = W * s + 'px';
+  wrap.style.height = H * s + 'px';
+  wrap.style.fontSize = 16 * s + 'px';
+}
+addEventListener('resize', fit);
+fit();
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+showMenu();
+loadArt();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
