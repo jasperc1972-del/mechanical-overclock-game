@@ -2,6 +2,7 @@
 
 一款精密機械組裝小遊戲：把定位柱和齒輪裝到主機板上，再進行轉速與溫度的過載測試。
 整個遊戲寫在單一 `index.html` 裡（HTML + CSS + JavaScript），不需要安裝任何東西。
+https://www.youtube.com/watch?v=jICG8YLsSvs
 
 ## ▶ 線上直接玩
 
